@@ -15,8 +15,8 @@ def get_user_by_id(db: Session, user_id: int):
     return result.scalar_one_or_none()
 
 
-def create_user(db: Session, email: str, hashed_password: str, role: str = "employee"):
-    user = models.User(email=email, hashed_password=hashed_password, role=role)
+def create_user(db: Session, email: str, hashed_password: str, role: str = "employee", full_name: str = None):
+    user = models.User(email=email, hashed_password=hashed_password, role=role, full_name=full_name)
     db.add(user)
     db.commit()
     db.refresh(user)

@@ -1,10 +1,10 @@
-
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 import schemas
 from crud import classes as crud
+from models import Class
 from db import get_db
 from deps import get_current_user, get_current_teacher
 
@@ -13,15 +13,36 @@ router = APIRouter(prefix="/classes", tags=["Classes"])
 
 # ── CRUD классов ──────────────────────────────────────────────────────────────
 
+@router.get("/all", response_model=List[schemas.ClassResponse])
+def list_all_classes(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Все активные классы — для поиска по коду при вступлении."""
+    classes = crud.get_all_classes(db)
+    result = []
+    for c in classes:
+        resp = schemas.ClassResponse.model_validate(c)
+        resp.member_count = len(c.members)
+        result.append(resp)
+    return result
+
+
 @router.get("/", response_model=List[schemas.ClassResponse])
 def list_classes(
     my_only: bool = False,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Список классов. teacher/admin с my_only=true — только свои."""
-    teacher_id = current_user.id if my_only else None
-    classes = crud.get_all_classes(db, teacher_id=teacher_id)
+    """Список классов. teacher/admin с my_only=true — только свои. student — только свои классы."""
+    if current_user.role == "student":
+        # Student sees only classes they are members of
+        classes = db.query(crud.Class).filter(
+            crud.Class.members.any(id=current_user.id)
+        ).order_by(crud.Class.created_at.desc()).all()
+    else:
+        teacher_id = current_user.id if my_only else None
+        classes = crud.get_all_classes(db, teacher_id=teacher_id)
     result = []
     for c in classes:
         resp = schemas.ClassResponse.model_validate(c)
@@ -106,6 +127,33 @@ def add_member(
     if not ok:
         raise HTTPException(status_code=404, detail="Класс или пользователь не найден")
     return {"message": "Участник добавлен"}
+
+
+@router.post("/{class_id}/join", status_code=status.HTTP_200_OK)
+def join_class(
+    class_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Студент вступает в класс по коду (без прав учителя)."""
+    obj = crud.get_class(db, class_id)
+    if not obj:
+        raise HTTPException(status_code=404, detail="Класс не найден")
+    ok = crud.add_member(db, class_id, current_user.id)
+    if not ok:
+        raise HTTPException(status_code=400, detail="Не удалось вступить")
+    return {"message": "Вы вступили в класс"}
+
+
+@router.delete("/{class_id}/leave", status_code=status.HTTP_200_OK)
+def leave_class(
+    class_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Студент покидает класс."""
+    crud.remove_member(db, class_id, current_user.id)
+    return {"message": "Вы покинули класс"}
 
 
 @router.delete("/{class_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)

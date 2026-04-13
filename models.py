@@ -49,6 +49,7 @@ class User(Base):
     role: Mapped[str] = mapped_column(String, default="student", nullable=False)
     # Roles: admin | teacher | student
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    full_name: Mapped[str] = mapped_column(String(200), nullable=True)
 
     posts: Mapped[list["Posts"]] = relationship(
         back_populates="user",

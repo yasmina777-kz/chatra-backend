@@ -18,7 +18,7 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=409, detail="Email already registered")
 
     hashed = hash_password(user.password)
-    created = crud_users.create_user(db, user.email, hashed, user.role)
+    created = crud_users.create_user(db, user.email, hashed, user.role, full_name=user.full_name)
     return created
 
 
@@ -37,6 +37,20 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 
 @router.get("/me", response_model=schemas.UserResponse)
 def me(current_user=Depends(get_current_user)):
+    return current_user
+
+
+@router.patch("/me", response_model=schemas.UserResponse)
+def update_me(
+    body: schemas.UpdateMe,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Обновить своё ФИО."""
+    if body.full_name is not None:
+        current_user.full_name = body.full_name.strip() or None
+        db.commit()
+        db.refresh(current_user)
     return current_user
 
 
