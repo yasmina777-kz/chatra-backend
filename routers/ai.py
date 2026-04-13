@@ -1,5 +1,7 @@
 import os
+import time
 import httpx
+from collections import defaultdict
 from typing import List, Optional, Union, Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -11,6 +13,24 @@ router = APIRouter(prefix="/ai", tags=["AI"])
 
 OPENAI_URL = "https://api.openai.com/v1/chat/completions"
 OPENAI_MODEL = "gpt-4o-mini"   # supports vision
+
+# ── Rate limiting (in-memory, per user) ──────────────────────────────────────
+# Лимит: не более 20 запросов в минуту на пользователя
+_rate_store: dict = defaultdict(list)
+RATE_LIMIT = 20       # запросов
+RATE_WINDOW = 60      # секунд
+
+def _check_rate_limit(user_id: int):
+    now = time.time()
+    timestamps = _rate_store[user_id]
+    # Удаляем старые записи за пределами окна
+    _rate_store[user_id] = [t for t in timestamps if now - t < RATE_WINDOW]
+    if len(_rate_store[user_id]) >= RATE_LIMIT:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Слишком много запросов к ИИ. Подождите немного и попробуйте снова.",
+        )
+    _rate_store[user_id].append(now)
 
 
 class ChatMessage(BaseModel):
@@ -49,6 +69,8 @@ async def ai_chat(
             status_code=503,
             detail="AI service is not configured. Please set OPENAI_API_KEY on the server.",
         )
+
+    _check_rate_limit(current_user.id)
 
     if not body.messages:
         raise HTTPException(status_code=422, detail="messages must not be empty")

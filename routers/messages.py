@@ -81,7 +81,7 @@ def get_messages(
         result = db.execute(
             text(
                 "SELECT id, content, chat_id, user_id, created_at, "
-                "COALESCE(is_read, 0) as is_read, file_url "
+                "COALESCE(is_read, false) as is_read, file_url "
                 "FROM messages WHERE chat_id = :cid ORDER BY id"
             ),
             {"cid": chat_id},

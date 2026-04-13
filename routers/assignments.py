@@ -11,6 +11,7 @@ from crud import classes as crud_classes
 from db import get_db
 from deps import get_current_user, get_current_teacher
 from services.ai_grader import grade_submission as _ai_grade
+from routers.ai import _check_rate_limit
 
 router = APIRouter(tags=["Assignments"])
 
@@ -415,6 +416,8 @@ async def ai_grade_submission(
     sub = crud.get_submission(db, submission_id)
     if not sub:
         raise HTTPException(status_code=404, detail="Submission not found")
+
+    _check_rate_limit(current_user.id)
 
     assignment = crud.get_assignment(db, sub.assignment_id)
     criteria = _json.loads(assignment.criteria) if assignment.criteria else []

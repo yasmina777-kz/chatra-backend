@@ -1,5 +1,5 @@
 import os
-import tempfile
+import io
 from uuid import uuid4
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from fastapi.responses import JSONResponse
@@ -8,7 +8,6 @@ import sys
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from services.file_service import read_file
-from services.storage import YC_ENABLED, upload_bytes
 
 router = APIRouter(prefix="/upload", tags=["Upload"])
 
@@ -25,15 +24,55 @@ ALLOWED_EXTENSIONS = {
 }
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 
-# MIME types for common extensions (used when uploading to YC)
-_MIME = {
-    "pdf": "application/pdf",
-    "png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
-    "gif": "image/gif", "webp": "image/webp",
-    "doc": "application/msword",
-    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "txt": "text/plain", "md": "text/markdown", "csv": "text/csv",
+# Magic bytes для проверки реального типа файла
+MAGIC_BYTES: dict = {
+    b"\x25\x50\x44\x46": "pdf",
+    b"\x50\x4b\x03\x04": "zip/docx/xlsx/pptx",  # ZIP-based formats
+    b"\xd0\xcf\x11\xe0": "doc/xls/ppt",          # Old Office formats
+    b"\x89\x50\x4e\x47": "png",
+    b"\xff\xd8\xff":     "jpg",
+    b"\x47\x49\x46\x38": "gif",
+    b"\x52\x49\x46\x46": "webp",
+    b"\x52\x61\x72\x21": "rar",
+    b"\x1f\x8b":         "gz",
 }
+
+# Расширения которые должны быть текстом (не бинарными)
+TEXT_EXTENSIONS = {"txt", "md", "csv", "rtf", "sm"}
+
+def _validate_file_content(content: bytes, ext: str) -> bool:
+    """Проверяет что содержимое файла соответствует заявленному расширению."""
+    if ext in TEXT_EXTENSIONS:
+        # Текстовый файл — просто проверяем что он декодируется
+        try:
+            content[:1024].decode("utf-8", errors="strict")
+            return True
+        except UnicodeDecodeError:
+            try:
+                content[:1024].decode("cp1251", errors="strict")
+                return True
+            except Exception:
+                return False
+    if ext == "pdf":
+        return content[:4] == b"\x25\x50\x44\x46"
+    if ext in ("png",):
+        return content[:4] == b"\x89\x50\x4e\x47"
+    if ext in ("jpg", "jpeg"):
+        return content[:3] == b"\xff\xd8\xff"
+    if ext == "gif":
+        return content[:4] == b"\x47\x49\x46\x38"
+    if ext == "webp":
+        return content[:4] == b"\x52\x49\x46\x46"
+    if ext == "rar":
+        return content[:4] == b"\x52\x61\x72\x21"
+    if ext in ("zip",):
+        return content[:4] == b"\x50\x4b\x03\x04"
+    if ext in ("docx", "xlsx", "pptx"):
+        return content[:4] == b"\x50\x4b\x03\x04"
+    if ext in ("doc", "xls", "ppt"):
+        return content[:4] == b"\xd0\xcf\x11\xe0"
+    # Для остальных форматов не проверяем magic bytes
+    return True
 
 
 @router.post("/")
@@ -48,48 +87,29 @@ async def upload_file(
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=415,
-            detail=f"File type '.{ext}' is not allowed. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
+            detail=f"Тип файла '.{ext}' не разрешён. Допустимые: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
         )
 
     content = await file.read()
     if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=413, detail="File too large (max 50 MB)")
+        raise HTTPException(status_code=413, detail="Файл слишком большой (максимум 50 МБ)")
+
+    # Проверка содержимого файла по magic bytes
+    if not _validate_file_content(content, ext):
+        raise HTTPException(
+            status_code=415,
+            detail=f"Содержимое файла не соответствует расширению .{ext}. Загрузите настоящий {ext.upper()} файл.",
+        )
 
     unique_filename = f"{uuid4().hex}.{ext}"
+    file_path = os.path.join(UPLOAD_DIR, unique_filename)
 
-    # ── Parse file content (requires a local path) ────────────────────────────
-    parsed = {}
-    tmp_path = None
     try:
-        with tempfile.NamedTemporaryFile(suffix=f".{ext}", delete=False) as tmp:
-            tmp.write(content)
-            tmp_path = tmp.name
-        parsed = read_file(tmp_path)
-    except Exception:
-        pass  # parsing is best-effort, don't fail the upload
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
+        with open(file_path, "wb") as buffer:
+            buffer.write(content)
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save file: {e}")
 
-    # ── Store file ────────────────────────────────────────────────────────────
-    if YC_ENABLED:
-        try:
-            key = f"uploads/{unique_filename}"
-            content_type = _MIME.get(ext, "application/octet-stream")
-            file_url = upload_bytes(content, key, content_type)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Object storage upload failed: {e}")
-    else:
-        # Fallback: save locally
-        file_path = os.path.join(UPLOAD_DIR, unique_filename)
-        try:
-            with open(file_path, "wb") as buf:
-                buf.write(content)
-        except OSError as e:
-            raise HTTPException(status_code=500, detail=f"Failed to save file: {e}")
-        file_url = f"{APP_BASE_URL.rstrip('/')}/uploads/{unique_filename}"
-
+    parsed = read_file(file_path)
+    file_url = f"{APP_BASE_URL.rstrip('/')}/uploads/{unique_filename}"
     return JSONResponse(content={"file_url": file_url, "filename": file.filename, "parsed": parsed})
