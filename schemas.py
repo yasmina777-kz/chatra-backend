@@ -292,6 +292,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
     role: str  # admin | teacher | student
+    full_name: str
 
 
 class UserResponse(BaseModel):
