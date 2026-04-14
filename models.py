@@ -87,7 +87,6 @@ class Posts(Base):
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     title: Mapped[str] = mapped_column(String, nullable=False)
     body: Mapped[str] = mapped_column(String, nullable=False)
-    # Optional: track creation time
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     user: Mapped["User"] = relationship(back_populates="posts")
@@ -143,7 +142,6 @@ class Assignment(Base):
     deadline: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    # Одно эталонное решение (legacy, оставляем для совместимости)
     reference_solution_url: Mapped[str] = mapped_column(String, nullable=True)
 
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
@@ -163,9 +161,6 @@ class Assignment(Base):
 class AssignmentVariant(Base):
     """
     Вариант задания с эталонным решением.
-    Учитель загружает несколько вариантов (1, 2, 3...),
-    каждый со своим эталонным файлом.
-    ИИ-проверка: сравнивает работу студента с нужным вариантом.
     """
     __tablename__ = "assignment_variants"
 
@@ -173,8 +168,8 @@ class AssignmentVariant(Base):
     assignment_id: Mapped[int] = mapped_column(
         ForeignKey("assignments.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    variant_number: Mapped[int] = mapped_column(Integer, nullable=False)  # 1, 2, 3...
-    title: Mapped[str] = mapped_column(String(256), nullable=True)        # "Вариант 1"
+    variant_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(256), nullable=True)
     reference_solution_url: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -184,7 +179,6 @@ class AssignmentVariant(Base):
 class Submission(Base):
     """
     Student answer. status: submitted | grading | graded | late
-    variant_number — студент указывает свой вариант при сдаче.
     """
     __tablename__ = "submissions"
 
@@ -193,9 +187,9 @@ class Submission(Base):
     student_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
 
     file_url: Mapped[str] = mapped_column(String, nullable=True)
-    file_urls: Mapped[str] = mapped_column(Text, nullable=True)    # JSON list of URLs
+    file_urls: Mapped[str] = mapped_column(Text, nullable=True)
     text_content: Mapped[str] = mapped_column(Text, nullable=True)
-    variant_number: Mapped[int] = mapped_column(Integer, nullable=True)  # номер варианта студента
+    variant_number: Mapped[int] = mapped_column(Integer, nullable=True)
 
     submitted_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     status: Mapped[str] = mapped_column(String, default="submitted")
@@ -208,12 +202,14 @@ class Submission(Base):
         cascade="all, delete-orphan",
     )
 
+    # Non-persisted: заполняется в API-слое, не хранится в БД
+    from typing import ClassVar
+    student_name: ClassVar[str] = None
+
 
 class Grade(Base):
     """
     AI or teacher grading result.
-    criteria_scores — JSON:
-    [{"name": "Полнота", "score": 35, "max": 40, "comment": "..."}]
     graded_by: "ai" | "teacher"
     """
     __tablename__ = "grades"
@@ -232,10 +228,10 @@ class Grade(Base):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  RAG — Document chunks with pgvector embeddings
+#  RAG
 # ══════════════════════════════════════════════════════════════════════════════
 
-EMBED_DIM = 1536  # text-embedding-3-small
+EMBED_DIM = 1536
 
 
 class RagDocument(Base):
@@ -253,11 +249,6 @@ class RagDocument(Base):
 
 
 class RagChunk(Base):
-    """
-    One text chunk from a RagDocument.
-    embedding stored as pgvector VECTOR(1536) — requires PostgreSQL + pgvector.
-    For SQLite (dev) the column falls back to Text (stored as JSON string).
-    """
     __tablename__ = "rag_chunks"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
@@ -267,23 +258,18 @@ class RagChunk(Base):
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     token_count: Mapped[int] = mapped_column(Integer, nullable=False)
-    # Stored as TEXT on SQLite, VECTOR(1536) on PostgreSQL via migration
     embedding: Mapped[str] = mapped_column(Text, nullable=False)
 
     document: Mapped["RagDocument"] = relationship(back_populates="chunks")
 
 
 class AiUsageLog(Base):
-    """
-    Logs every AI API call with token usage for admin analytics.
-    class_id=NULL means it was a general AI chat (not class-specific).
-    """
     __tablename__ = "ai_usage_logs"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     class_id: Mapped[int] = mapped_column(Integer, nullable=True, index=True)
-    endpoint: Mapped[str] = mapped_column(String(64), nullable=False)  # "chat" | "ai-grade"
+    endpoint: Mapped[str] = mapped_column(String(64), nullable=False)
     prompt_tokens: Mapped[int] = mapped_column(Integer, default=0)
     completion_tokens: Mapped[int] = mapped_column(Integer, default=0)
     total_tokens: Mapped[int] = mapped_column(Integer, default=0)
@@ -291,11 +277,6 @@ class AiUsageLog(Base):
 
 
 class ProcessedDocument(Base):
-    """
-    Кэш: результат алгоритмического парсинга файла (без ИИ).
-    Хранит структурированный JSON — параграфы, таблицы, OCR-текст с картинок.
-    ИИ читает этот JSON вместо сырого файла → экономия ~70-90% токенов.
-    """
     __tablename__ = "processed_documents"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
@@ -303,7 +284,7 @@ class ProcessedDocument(Base):
         ForeignKey("rag_documents.id", ondelete="CASCADE"), nullable=True, index=True
     )
     filename: Mapped[str] = mapped_column(String(512), nullable=False)
-    format: Mapped[str] = mapped_column(String(32), nullable=False)   # docx|pdf|image|text
+    format: Mapped[str] = mapped_column(String(32), nullable=False)
     content_json: Mapped[str] = mapped_column(Text, nullable=False)
     token_count: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

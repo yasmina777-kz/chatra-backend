@@ -288,7 +288,15 @@ def get_submissions(
     assignment = crud.get_assignment(db, assignment_id)
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
-    return crud.get_submissions_for_assignment(db, assignment_id)
+    subs = crud.get_submissions_for_assignment(db, assignment_id)
+
+    # Enrich with student ФИО
+    from models import User
+    for sub in subs:
+        user = db.query(User).filter(User.id == sub.student_id).first()
+        if user:
+            sub.student_name = user.full_name or user.email
+    return subs
 
 
 # ════════════════════════════════════════════════════════
@@ -306,6 +314,13 @@ def get_submission(
         raise HTTPException(status_code=404, detail="Submission not found")
     if current_user.role == "student" and obj.student_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
+
+    # Enrich with student ФИО для учителя
+    if current_user.role in ("teacher", "admin"):
+        from models import User
+        user = db.query(User).filter(User.id == obj.student_id).first()
+        if user:
+            obj.student_name = user.full_name or user.email
     return obj
 
 
@@ -462,7 +477,6 @@ async def ai_grade_submission(
     if sub.variant_number:
         variant = crud_classes.get_variant_by_number(db, sub.assignment_id, sub.variant_number)
         if variant:
-            # variant may have multiple reference files stored as JSON
             try:
                 import json as _json2
                 var_urls = _json2.loads(variant.reference_solution_url) if variant.reference_solution_url.startswith('[') else None
@@ -473,7 +487,6 @@ async def ai_grade_submission(
             except Exception:
                 reference_urls.append(variant.reference_solution_url)
         else:
-            # fallback to assignment-level refs
             if assignment.reference_solution_url:
                 try:
                     import json as _json2
