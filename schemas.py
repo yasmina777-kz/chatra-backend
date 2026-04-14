@@ -292,7 +292,9 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
     role: str  # admin | teacher | student
-    full_name: str
+    full_name: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserResponse(BaseModel):
