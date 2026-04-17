@@ -1,16 +1,3 @@
-"""
-services/retriever.py
-──────────────────────
-RAG retrieval: pgvector ANN search → token-capped context → LLM answer.
-
-Token budget:
-  System prompt  ~200
-  Retrieved text ≤ 3 000  (hard cap, enforced here)
-  User question  ~50
-  ─────────────────────
-  Total          < 3 500   (vs ~50 000 previously)
-"""
-
 import logging
 import os
 from typing import Optional
@@ -33,23 +20,14 @@ _SYSTEM_PROMPT = (
     "Respond in the same language as the question."
 )
 
-
 def retrieve_and_answer(question: str, db, top_k: Optional[int] = None) -> dict:
-    """
-    Synchronous RAG pipeline.
-    db — SQLAlchemy Session (from get_db dependency).
-    Returns dict: {answer, sources, context_tokens}
-    """
     from sqlalchemy import text as sa_text
 
     k = top_k or TOP_K
 
-    # 1. Embed the query
     query_vec = embed_query_sync(question)
     vec_literal = f"[{','.join(str(v) for v in query_vec)}]"
 
-    # 2. ANN search via pgvector cosine distance
-    # Fetch k*2 candidates so token-cap trimming still leaves >=k chunks
     sql = sa_text(
         """
         SELECT
@@ -75,8 +53,7 @@ def retrieve_and_answer(question: str, db, top_k: Optional[int] = None) -> dict:
             "context_tokens": 0,
         }
 
-    # 3. Token cap: fill up to MAX_CONTEXT_TOKENS
-    selected: list[tuple] = []   # (row, text_used)
+    selected: list[tuple] = []
     total_tokens = 0
 
     for row in rows:
@@ -100,17 +77,14 @@ def retrieve_and_answer(question: str, db, top_k: Optional[int] = None) -> dict:
         len(selected), total_tokens, MAX_CONTEXT_TOKENS,
     )
 
-    # 4. Build context string
     context_parts = [
         f"[{i}] (source: {row.filename})\n{chunk_text}"
         for i, (row, chunk_text) in enumerate(selected, 1)
     ]
     context = "\n\n---\n\n".join(context_parts)
 
-    # 5. Call LLM (sync via httpx)
     answer = _call_llm(question, context)
 
-    # 6. Source attribution
     sources = [
         {
             "document_id": row.document_id,
@@ -123,9 +97,7 @@ def retrieve_and_answer(question: str, db, top_k: Optional[int] = None) -> dict:
 
     return {"answer": answer, "sources": sources, "context_tokens": total_tokens}
 
-
 def _call_llm(question: str, context: str) -> str:
-    """Synchronous OpenAI chat completion via httpx."""
     api_key = os.getenv("OPENAI_API_KEY", "")
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY is not set.")
@@ -157,7 +129,6 @@ def _call_llm(question: str, context: str) -> str:
         raise RuntimeError(f"OpenAI error {resp.status_code}: {resp.text[:300]}")
 
     return resp.json()["choices"][0]["message"]["content"].strip()
-
 
 def _trim_to_tokens(text: str, max_tokens: int) -> str:
     import tiktoken

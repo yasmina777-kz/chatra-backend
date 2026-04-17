@@ -23,21 +23,16 @@ logging.basicConfig(level=logging.INFO)
 
 Base.metadata.create_all(bind=engine)
 
-
 def _migrate():
-    """Safe schema migrations for columns added after initial deploy."""
     with engine.connect() as conn:
         migrations = [
-            # Legacy columns
             "ALTER TABLE assignments ADD COLUMN IF NOT EXISTS class_id INTEGER NOT NULL DEFAULT 0",
             "CREATE INDEX IF NOT EXISTS ix_assignments_class_id ON assignments(class_id)",
             "ALTER TABLE assignments ADD COLUMN IF NOT EXISTS reference_solution_url TEXT",
             "ALTER TABLE submissions ADD COLUMN IF NOT EXISTS file_urls TEXT",
             "ALTER TABLE messages ADD COLUMN IF NOT EXISTS file_url TEXT",
             "ALTER TABLE posts ADD COLUMN IF NOT EXISTS created_at DATETIME",
-            # New: variant_number on submissions
             "ALTER TABLE submissions ADD COLUMN IF NOT EXISTS variant_number INTEGER",
-            # New: AI usage logs table
             """CREATE TABLE IF NOT EXISTS ai_usage_logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -61,15 +56,12 @@ def _migrate():
                     conn.execute(text(plain))
                     conn.commit()
                 except Exception:
-                    pass  # Column / index already exists
-
+                    pass
 
 _migrate()
 
-# ── CORS ──────────────────────────────────────────────────────────────────────
 _cors_raw = os.getenv("CORS_ORIGINS", "*")
 _cors_origins = [o.strip() for o in _cors_raw.split(",")] if _cors_raw != "*" else ["*"]
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -82,7 +74,6 @@ async def lifespan(app: FastAPI):
             await task
         except asyncio.CancelledError:
             pass
-
 
 app = FastAPI(title="Chatra API", version="3.0", lifespan=lifespan)
 
@@ -105,9 +96,9 @@ app.include_router(reactions.router)
 app.include_router(uploads.router)
 app.include_router(ai.router)
 app.include_router(assignments_router)
-app.include_router(classes_router)   # /classes/...
-app.include_router(rating_router)    # /rating
-app.include_router(rag_router)       # /rag/...
+app.include_router(classes_router)
+app.include_router(rating_router)
+app.include_router(rag_router)
 
 _upload_dir = os.getenv("UPLOAD_DIR", "uploads")
 os.makedirs(_upload_dir, exist_ok=True)

@@ -12,10 +12,9 @@ from datetime import datetime
 router = APIRouter(
     prefix="/admin",
     tags=["Admin"],
-    dependencies=[Depends(get_current_admin)]  # автоматически на всё
+    dependencies=[Depends(get_current_admin)]
 )
 
-# CREATE USER
 @router.post("/users", response_model=UserResponse)
 def create_user(
     user: UserCreate,
@@ -39,14 +38,10 @@ def create_user(
 
     return db_user
 
-
-# READ USERS
 @router.get("/users", response_model=list[UserResponse])
 def get_users(db: Session = Depends(get_db)):
     return db.query(User).all()
 
-
-# UPDATE ROLE
 @router.put("/users/{user_id}/role")
 def update_user_role(
     user_id: int,
@@ -63,8 +58,6 @@ def update_user_role(
 
     return {"message": "Role updated"}
 
-
-# BLOCK USER
 @router.put("/users/{user_id}/block")
 def block_user(
     user_id: int,
@@ -80,8 +73,6 @@ def block_user(
 
     return {"message": "User blocked"}
 
-
-# UNBLOCK USER
 @router.put("/users/{user_id}/unblock")
 def unblock_user(
     user_id: int,
@@ -97,8 +88,6 @@ def unblock_user(
 
     return {"message": "User unblocked"}
 
-
-# DELETE USER
 @router.delete("/users/{user_id}")
 def delete_user(
     user_id: int,
@@ -114,9 +103,6 @@ def delete_user(
 
     return {"message": "User deleted"}
 
-
-# ── AI USAGE LOGS ──────────────────────────────────────────────────────────────
-
 @router.get("/ai-usage")
 def get_ai_usage(
     class_id: Optional[int] = Query(None, description="Filter by class, None = all"),
@@ -124,10 +110,6 @@ def get_ai_usage(
     page_size: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
 ):
-    """
-    Returns AI usage logs sorted by most recent first.
-    Optionally filtered by class_id.
-    """
     from sqlalchemy import desc, func
     q = db.query(AiUsageLog)
     if class_id is not None:
@@ -158,14 +140,10 @@ def get_ai_usage(
         ],
     }
 
-
 @router.get("/ai-usage/summary")
 def get_ai_usage_summary(
     db: Session = Depends(get_db),
 ):
-    """
-    Returns per-class token usage summary for all classes.
-    """
     from sqlalchemy import func
     rows = (
         db.query(
@@ -188,4 +166,3 @@ def get_ai_usage_summary(
         }
         for r in rows
     ]
-

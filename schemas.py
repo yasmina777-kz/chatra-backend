@@ -2,17 +2,13 @@ from pydantic import BaseModel, ConfigDict, EmailStr
 from typing import Optional, List, Any
 from datetime import datetime
 
-
-# ─── Users ──────────────────────────────────────────────────────────────────
-
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
-    role: str  # admin | teacher | student
+    role: str
     full_name: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
-
 
 class UserResponse(BaseModel):
     id: int
@@ -23,28 +19,21 @@ class UserResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-
 class UpdateMe(BaseModel):
     full_name: Optional[str] = None
-
 
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
-
 
 class UserAdminUpdate(BaseModel):
     email: Optional[EmailStr] = None
     is_active: Optional[bool] = None
     role: Optional[str] = None
 
-
-# ─── Posts ──────────────────────────────────────────────────────────────────
-
 class PostCreate(BaseModel):
     title: str
     body: str
-
 
 class PostResponse(BaseModel):
     id: int
@@ -55,12 +44,8 @@ class PostResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-
-# ─── Chats / Messages ────────────────────────────────────────────────────────
-
 class ChatCreate(BaseModel):
     name: str
-
 
 class ChatResponse(BaseModel):
     id: int
@@ -68,18 +53,13 @@ class ChatResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-
 class MessageCreate(BaseModel):
     content: str
-
-
-# ─── Assignments ─────────────────────────────────────────────────────────────
 
 class CriterionIn(BaseModel):
     name: str
     weight: int
     description: Optional[str] = None
-
 
 class AssignmentCreate(BaseModel):
     class_id: int
@@ -90,7 +70,6 @@ class AssignmentCreate(BaseModel):
     deadline: Optional[datetime] = None
     reference_solution_url: Optional[str] = None
 
-
 class AssignmentUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
@@ -99,7 +78,6 @@ class AssignmentUpdate(BaseModel):
     deadline: Optional[datetime] = None
     is_active: Optional[bool] = None
     reference_solution_url: Optional[str] = None
-
 
 class AssignmentResponse(BaseModel):
     id: int
@@ -116,14 +94,10 @@ class AssignmentResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-
-# ─── Submission ───────────────────────────────────────────────────────────────
-
 class SubmissionCreate(BaseModel):
     text_content: Optional[str] = None
     file_url: Optional[str] = None
     file_urls: Optional[List[str]] = None
-
 
 class SubmissionResponse(BaseModel):
     id: int
@@ -135,25 +109,20 @@ class SubmissionResponse(BaseModel):
     variant_number: Optional[int] = None
     submitted_at: datetime
     status: str
-    student_name: Optional[str] = None   # ФИО студента
+    student_name: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
-
 
 class SubmissionWithGrade(SubmissionResponse):
     grade: Optional["GradeResponse"] = None
 
     model_config = ConfigDict(from_attributes=True)
 
-
-# ─── Grade ────────────────────────────────────────────────────────────────────
-
 class GradeCreate(BaseModel):
     score: int
     feedback: Optional[str] = None
     criteria_scores: Optional[List[Any]] = None
     graded_by: str = "ai"
-
 
 class GradeResponse(BaseModel):
     id: int
@@ -166,22 +135,16 @@ class GradeResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-
 SubmissionWithGrade.model_rebuild()
-
-
-# ─── RAG ─────────────────────────────────────────────────────────────────────
 
 class RagIngestResponse(BaseModel):
     document_id: int
     filename: str
     chunks_created: int
 
-
 class RagQueryRequest(BaseModel):
     question: str
     top_k: Optional[int] = None
-
 
 class RagChunkSource(BaseModel):
     document_id: int
@@ -189,12 +152,10 @@ class RagChunkSource(BaseModel):
     chunk_index: int
     text_preview: str
 
-
 class RagQueryResponse(BaseModel):
     answer: str
     sources: List[RagChunkSource]
     context_tokens: int
-
 
 class ProcessedDocumentResponse(BaseModel):
     id: int
@@ -206,19 +167,14 @@ class ProcessedDocumentResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-
-# ─── Classes ─────────────────────────────────────────────────────────────────
-
 class ClassCreate(BaseModel):
     name: str
     description: Optional[str] = None
-
 
 class ClassUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     is_active: Optional[bool] = None
-
 
 class ClassResponse(BaseModel):
     id: int
@@ -231,18 +187,13 @@ class ClassResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-
 class ClassMemberAdd(BaseModel):
     user_id: int
-
-
-# ─── Variants ─────────────────────────────────────────────────────────────────
 
 class VariantCreate(BaseModel):
     variant_number: int
     title: Optional[str] = None
     reference_solution_url: str
-
 
 class VariantResponse(BaseModel):
     id: int
@@ -254,21 +205,16 @@ class VariantResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-
 class AssignmentResponseFull(AssignmentResponse):
     variants: List[VariantResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
-
 
 class SubmissionCreateV2(BaseModel):
     text_content: Optional[str] = None
     file_url: Optional[str] = None
     file_urls: Optional[List[str]] = None
     variant_number: Optional[int] = None
-
-
-# ─── Rating ───────────────────────────────────────────────────────────────────
 
 class StudentRatingEntry(BaseModel):
     student_id: int
@@ -277,7 +223,6 @@ class StudentRatingEntry(BaseModel):
     total_score: int
     graded_count: int
     avg_score: float
-
 
 class StudentRatingResponse(BaseModel):
     class_id: Optional[int] = None

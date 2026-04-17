@@ -1,4 +1,3 @@
-
 import json
 import os
 import io
@@ -9,7 +8,6 @@ from typing import Optional
 
 OPENAI_URL = "https://api.openai.com/v1/chat/completions"
 OPENAI_MODEL = "gpt-4o-mini"  
-
 
 def _build_system_prompt(has_reference: bool) -> str:
     ref_block = ""
@@ -50,7 +48,6 @@ def _build_system_prompt(has_reference: bool) -> str:
     }}
   ]
 }}"""
-
 
 def _build_user_prompt(
     text: str,
@@ -97,11 +94,7 @@ def _build_user_prompt(
 
 Верни ТОЛЬКО JSON без лишних слов."""
 
-
 async def _fetch_file_text(url: str) -> str:
-    """Downloads a file and returns its text content.
-    Supports: PDF, DOCX, DOC, PPTX, XLSX, XLS, TXT, MD, CSV, RTF.
-    """
     if not url or not url.startswith("http"):
         return ""
     try:
@@ -114,7 +107,6 @@ async def _fetch_file_text(url: str) -> str:
             ext = raw_ext[-1].lower() if len(raw_ext) > 1 else ""
             content_type = resp.headers.get("content-type", "").lower()
 
-            # ── PDF ──────────────────────────────────────────────────────────
             if ext == "pdf" or "pdf" in content_type:
                 try:
                     from pypdf import PdfReader
@@ -129,7 +121,6 @@ async def _fetch_file_text(url: str) -> str:
                 except Exception as e:
                     return f"[PDF — не удалось извлечь текст: {e}]"
 
-            # ── DOCX / PPTX / XLSX (ZIP-based Office) ────────────────────────
             elif ext in ("docx", "pptx", "xlsx"):
                 try:
                     with zipfile.ZipFile(io.BytesIO(resp.content)) as z:
@@ -153,15 +144,12 @@ async def _fetch_file_text(url: str) -> str:
                 except Exception as e:
                     return f"[Office файл — не удалось прочитать: {e}]"
 
-            # ── Plain text / Markdown / CSV ───────────────────────────────────
             elif ext in ("txt", "md", "csv", "tsv", "log", "json", "xml", "yaml", "yml"):
                 return resp.content.decode("utf-8", errors="ignore")[:20000]
 
-            # ── Images — no text available ────────────────────────────────────
             elif ext in ("png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"):
                 return "[Изображение — текстовое содержимое недоступно]"
 
-            # ── Fallback: try UTF-8 decode ────────────────────────────────────
             else:
                 try:
                     decoded = resp.content.decode("utf-8", errors="ignore")
@@ -174,7 +162,6 @@ async def _fetch_file_text(url: str) -> str:
     except Exception:
         return ""
 
-
 async def grade_submission(
     text: str,
     criteria: list,
@@ -183,12 +170,6 @@ async def grade_submission(
     reference_solution_url: Optional[str] = None,
     reference_solution_urls: Optional[list] = None,
 ) -> dict:
-    """
-    Grades a student submission using OpenAI GPT.
-    Returns: {"score": int, "feedback": str, "criteria_scores": [...], "_usage": {...}}
-    reference_solution_urls: list of multiple reference file URLs (new multi-file support)
-    reference_solution_url: single URL (legacy, still supported)
-    """
     api_key = os.getenv("OPENAI_API_KEY", "")
     if not api_key:
         raise RuntimeError(
@@ -196,7 +177,6 @@ async def grade_submission(
             "Please add it to your .env file: OPENAI_API_KEY=sk-..."
         )
 
-    # ── Build student submission text ─────────────────────────────────────────
     full_text = (text or "").strip()
     has_file = False
 
@@ -216,10 +196,8 @@ async def grade_submission(
     if not full_text:
         full_text = "[Студент не предоставил ответа]"
 
-    # ── Read reference solution(s) ────────────────────────────────────────────
     reference_text: Optional[str] = None
 
-    # Collect all reference URLs (new multi-file + legacy single)
     all_ref_urls: list = []
     if reference_solution_urls:
         all_ref_urls.extend(reference_solution_urls)
@@ -236,7 +214,6 @@ async def grade_submission(
         if ref_parts:
             reference_text = "\n\n".join(ref_parts)
 
-    # ── Build OpenAI request ──────────────────────────────────────────────────
     has_reference = reference_text is not None
     payload = {
         "model": OPENAI_MODEL,
@@ -271,7 +248,6 @@ async def grade_submission(
 
     raw = resp.json()["choices"][0]["message"]["content"].strip()
 
-    # Strip markdown code blocks if present
     if raw.startswith("```"):
         raw = re.sub(r'^```(?:json)?\s*', '', raw)
         raw = re.sub(r'\s*```$', '', raw)
@@ -293,24 +269,14 @@ async def grade_submission(
     if not isinstance(result.get("criteria_scores"), list):
         result["criteria_scores"] = []
 
-    # Attach usage info for caller to log
     usage = resp.json().get("usage", {})
     result["_usage"] = usage
 
     return result
 
-
-# ── Cached document fetch (uses ProcessedDocument JSON if available) ───────────
-
 def get_cached_text_for_url(file_url: str, db) -> str:
-    """
-    Если для данного URL уже есть ProcessedDocument в БД — возвращаем
-    full_text из кэша (без повторного скачивания и парсинга).
-    Иначе возвращает пустую строку (вызывающий код сам скачает файл).
-    """
     try:
         from models import ProcessedDocument
-        # Ищем по имени файла в URL
         filename = file_url.rstrip("/").split("/")[-1].split("?")[0]
         proc = db.query(ProcessedDocument).filter(
             ProcessedDocument.filename == filename

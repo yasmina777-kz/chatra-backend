@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 _ALLOWED_MIME = {
     "application/pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",  # .docx
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "image/png",
     "image/jpeg",
     "image/webp",
@@ -40,20 +40,15 @@ _EXT_FALLBACK = {
     ".md": "text/markdown",
 }
 
-_MAX_BYTES = 50 * 1024 * 1024  # 50 MB
-
+_MAX_BYTES = 50 * 1024 * 1024
 
 def _resolve_mime(file: UploadFile) -> str:
-    """Определяем MIME по заголовку или расширению файла."""
     from pathlib import Path
     ct = file.content_type or ""
     if ct in _ALLOWED_MIME:
         return ct
     ext = Path(file.filename or "").suffix.lower()
     return _EXT_FALLBACK.get(ext, ct)
-
-
-# ── Ingest ────────────────────────────────────────────────────────────────────
 
 @router.post(
     "/ingest",
@@ -65,13 +60,6 @@ def ingest_file(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_teacher),
 ) -> schemas.RagIngestResponse:
-    """
-    1. Читаем файл
-    2. Алгоритмически парсим → структурированный JSON (без ИИ)
-    3. Сохраняем JSON в ProcessedDocument (кэш)
-    4. Из full_text нарезаем чанки и строим эмбеддинги
-    5. Сохраняем чанки в RagChunk для ANN-поиска
-    """
     mime = _resolve_mime(file)
     if mime not in _ALLOWED_MIME:
         raise HTTPException(
@@ -85,7 +73,6 @@ def ingest_file(
 
     fname = file.filename or "upload"
 
-    # ── Шаг 1: алгоритмический парсинг (без ИИ) ──────────────────────────────
     try:
         doc_json = process_document(data, fname)
     except ValueError as exc:
@@ -101,10 +88,9 @@ def ingest_file(
     token_count = count_tokens(full_text)
     logger.info("'%s': распарсен, %d токенов", fname, token_count)
 
-    # ── Шаг 2: сохраняем RagDocument + ProcessedDocument ─────────────────────
     rag_doc = RagDocument(filename=fname, mime_type=mime)
     db.add(rag_doc)
-    db.flush()  # получаем rag_doc.id
+    db.flush()
 
     proc_doc = ProcessedDocument(
         rag_document_id=rag_doc.id,
@@ -115,7 +101,6 @@ def ingest_file(
     )
     db.add(proc_doc)
 
-    # ── Шаг 3: нарезаем чанки из full_text и эмбеддируем ─────────────────────
     chunks = chunk_text(full_text)
     if not chunks:
         raise HTTPException(status_code=422, detail="Текст не разбился на чанки.")
@@ -142,20 +127,12 @@ def ingest_file(
         chunks_created=len(chunks),
     )
 
-
-# ── Query ─────────────────────────────────────────────────────────────────────
-
 @router.post("/query", response_model=schemas.RagQueryResponse)
 def query_rag(
     body: schemas.RagQueryRequest,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ) -> schemas.RagQueryResponse:
-    """
-    RAG запрос: ищем релевантные чанки по эмбеддингу,
-    собираем контекст из ProcessedDocument JSON (не из сырого файла),
-    отправляем ≤3000 токенов в LLM.
-    """
     try:
         result = retrieve_and_answer(
             question=body.question,
@@ -171,15 +148,11 @@ def query_rag(
         context_tokens=result["context_tokens"],
     )
 
-
-# ── Document management ───────────────────────────────────────────────────────
-
 @router.get("/documents", response_model=List[schemas.RagIngestResponse])
 def list_documents(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Список всех проиндексированных документов."""
     docs = db.query(RagDocument).order_by(RagDocument.created_at.desc()).all()
     return [
         schemas.RagIngestResponse(
@@ -190,14 +163,12 @@ def list_documents(
         for d in docs
     ]
 
-
 @router.get("/documents/{doc_id}/content", response_model=dict)
 def get_document_json(
     doc_id: int,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_teacher),
 ):
-    """Вернуть сохранённый JSON-кэш документа (для отладки / просмотра)."""
     proc = db.query(ProcessedDocument).filter(
         ProcessedDocument.rag_document_id == doc_id
     ).first()
@@ -205,14 +176,12 @@ def get_document_json(
         raise HTTPException(status_code=404, detail="JSON-кэш не найден")
     return json.loads(proc.content_json)
 
-
 @router.delete("/documents/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_document(
     doc_id: int,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_teacher),
 ):
-    """Удалить документ, его чанки и JSON-кэш."""
     doc = db.query(RagDocument).filter(RagDocument.id == doc_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Документ не найден")

@@ -1,10 +1,7 @@
-
 from typing import Optional, List
 from sqlalchemy.orm import Session
 from models import Class, User, AssignmentVariant, Assignment, Submission, Grade, class_members
 from sqlalchemy import func
-
-
 
 def create_class(db: Session, name: str, description: Optional[str], created_by: int) -> Class:
     obj = Class(name=name, description=description, created_by=created_by)
@@ -13,17 +10,14 @@ def create_class(db: Session, name: str, description: Optional[str], created_by:
     db.refresh(obj)
     return obj
 
-
 def get_class(db: Session, class_id: int) -> Optional[Class]:
     return db.query(Class).filter(Class.id == class_id).first()
-
 
 def get_all_classes(db: Session, teacher_id: Optional[int] = None) -> List[Class]:
     q = db.query(Class)
     if teacher_id is not None:
         q = q.filter(Class.created_by == teacher_id)
     return q.order_by(Class.created_at.desc()).all()
-
 
 def update_class(db: Session, class_id: int, data: dict) -> Optional[Class]:
     obj = get_class(db, class_id)
@@ -36,7 +30,6 @@ def update_class(db: Session, class_id: int, data: dict) -> Optional[Class]:
     db.refresh(obj)
     return obj
 
-
 def delete_class(db: Session, class_id: int) -> bool:
     obj = get_class(db, class_id)
     if not obj:
@@ -44,7 +37,6 @@ def delete_class(db: Session, class_id: int) -> bool:
     db.delete(obj)
     db.commit()
     return True
-
 
 def add_member(db: Session, class_id: int, user_id: int) -> bool:
     obj = get_class(db, class_id)
@@ -58,7 +50,6 @@ def add_member(db: Session, class_id: int, user_id: int) -> bool:
         db.commit()
     return True
 
-
 def remove_member(db: Session, class_id: int, user_id: int) -> bool:
     obj = get_class(db, class_id)
     if not obj:
@@ -69,14 +60,11 @@ def remove_member(db: Session, class_id: int, user_id: int) -> bool:
         db.commit()
     return True
 
-
 def get_members(db: Session, class_id: int) -> List[User]:
     obj = get_class(db, class_id)
     if not obj:
         return []
     return obj.members
-
-
 
 def add_variant(
     db: Session,
@@ -85,7 +73,6 @@ def add_variant(
     reference_solution_url: str,
     title: Optional[str] = None,
 ) -> AssignmentVariant:
-    # Remove existing variant with same number if exists
     existing = db.query(AssignmentVariant).filter(
         AssignmentVariant.assignment_id == assignment_id,
         AssignmentVariant.variant_number == variant_number,
@@ -105,7 +92,6 @@ def add_variant(
     db.refresh(obj)
     return obj
 
-
 def get_variants(db: Session, assignment_id: int) -> List[AssignmentVariant]:
     return (
         db.query(AssignmentVariant)
@@ -113,7 +99,6 @@ def get_variants(db: Session, assignment_id: int) -> List[AssignmentVariant]:
         .order_by(AssignmentVariant.variant_number)
         .all()
     )
-
 
 def delete_variant(db: Session, variant_id: int) -> bool:
     obj = db.query(AssignmentVariant).filter(AssignmentVariant.id == variant_id).first()
@@ -123,14 +108,11 @@ def delete_variant(db: Session, variant_id: int) -> bool:
     db.commit()
     return True
 
-
 def get_variant_by_number(db: Session, assignment_id: int, variant_number: int) -> Optional[AssignmentVariant]:
     return db.query(AssignmentVariant).filter(
         AssignmentVariant.assignment_id == assignment_id,
         AssignmentVariant.variant_number == variant_number,
     ).first()
-
-
 
 def get_student_rating(db: Session, class_id: Optional[int] = None) -> list:
     q = (
@@ -147,7 +129,6 @@ def get_student_rating(db: Session, class_id: Optional[int] = None) -> list:
     )
 
     if class_id is not None:
-        # Filter only students in this class who submitted to assignments of this class
         q = q.filter(
             Submission.assignment_id.in_(
                 db.query(Assignment.id).filter(Assignment.class_id == class_id)

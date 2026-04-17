@@ -5,7 +5,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime
 from db import Base
 
-
 class_members = Table(
     "class_members",
     Base.metadata,
@@ -20,9 +19,7 @@ chat_members = Table(
     Column("user_id", Integer, ForeignKey("users.id")),
 )
 
-
 class Class(Base):
-    """Учебный класс/группа. Создаётся учителем или администратором."""
     __tablename__ = "classes"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
@@ -39,7 +36,6 @@ class Class(Base):
         back_populates="classes",
     )
 
-
 class User(Base):
     __tablename__ = "users"
 
@@ -47,7 +43,6 @@ class User(Base):
     email: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(String, nullable=False)
     role: Mapped[str] = mapped_column(String, default="student", nullable=False)
-    # Roles: admin | teacher | student
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     full_name: Mapped[str] = mapped_column(String(200), nullable=True)
 
@@ -80,7 +75,6 @@ class User(Base):
         back_populates="members",
     )
 
-
 class Posts(Base):
     __tablename__ = "posts"
 
@@ -90,7 +84,6 @@ class Posts(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     user: Mapped["User"] = relationship(back_populates="posts")
-
 
 class Chat(Base):
     __tablename__ = "chats"
@@ -103,7 +96,6 @@ class Chat(Base):
         back_populates="chats",
     )
 
-
 class Message(Base):
     __tablename__ = "messages"
 
@@ -115,7 +107,6 @@ class Message(Base):
     is_read = Column(Boolean, default=False)
     file_url = Column(String, nullable=True)
 
-
 class Reaction(Base):
     __tablename__ = "reactions"
 
@@ -124,20 +115,14 @@ class Reaction(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     emoji = Column(String)
 
-
 class Assignment(Base):
-    """
-    Assignment created by teacher/admin.
-    criteria — JSON string:
-    [{"name": "Полнота", "weight": 40, "description": "..."}, ...]
-    """
     __tablename__ = "assignments"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     class_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True, server_default="0")
     title: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=True)
-    criteria: Mapped[str] = mapped_column(Text, nullable=False)  # JSON
+    criteria: Mapped[str] = mapped_column(Text, nullable=False)
     max_score: Mapped[int] = mapped_column(Integer, default=100)
     deadline: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -157,11 +142,7 @@ class Assignment(Base):
         order_by="AssignmentVariant.variant_number",
     )
 
-
 class AssignmentVariant(Base):
-    """
-    Вариант задания с эталонным решением.
-    """
     __tablename__ = "assignment_variants"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
@@ -175,11 +156,7 @@ class AssignmentVariant(Base):
 
     assignment: Mapped["Assignment"] = relationship(back_populates="variants")
 
-
 class Submission(Base):
-    """
-    Student answer. status: submitted | grading | graded | late
-    """
     __tablename__ = "submissions"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
@@ -202,16 +179,10 @@ class Submission(Base):
         cascade="all, delete-orphan",
     )
 
-    # Non-persisted: заполняется в API-слое, не хранится в БД
     from typing import ClassVar
     student_name: ClassVar[str] = None
 
-
 class Grade(Base):
-    """
-    AI or teacher grading result.
-    graded_by: "ai" | "teacher"
-    """
     __tablename__ = "grades"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
@@ -220,22 +191,15 @@ class Grade(Base):
     )
     score: Mapped[int] = mapped_column(Integer, nullable=False)
     feedback: Mapped[str] = mapped_column(Text, nullable=True)
-    criteria_scores: Mapped[str] = mapped_column(Text, nullable=True)  # JSON
+    criteria_scores: Mapped[str] = mapped_column(Text, nullable=True)
     graded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     graded_by: Mapped[str] = mapped_column(String, default="ai")
 
     submission: Mapped["Submission"] = relationship(back_populates="grade")
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  RAG
-# ══════════════════════════════════════════════════════════════════════════════
-
 EMBED_DIM = 1536
 
-
 class RagDocument(Base):
-    """One uploaded lecture file indexed for RAG."""
     __tablename__ = "rag_documents"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
@@ -246,7 +210,6 @@ class RagDocument(Base):
     chunks: Mapped[list["RagChunk"]] = relationship(
         back_populates="document", cascade="all, delete-orphan"
     )
-
 
 class RagChunk(Base):
     __tablename__ = "rag_chunks"
@@ -262,7 +225,6 @@ class RagChunk(Base):
 
     document: Mapped["RagDocument"] = relationship(back_populates="chunks")
 
-
 class AiUsageLog(Base):
     __tablename__ = "ai_usage_logs"
 
@@ -274,7 +236,6 @@ class AiUsageLog(Base):
     completion_tokens: Mapped[int] = mapped_column(Integer, default=0)
     total_tokens: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-
 
 class ProcessedDocument(Base):
     __tablename__ = "processed_documents"

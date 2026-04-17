@@ -1,6 +1,3 @@
-"""
-CRUD для заданий, сдач и оценок.
-"""
 import json
 from datetime import datetime
 from typing import Optional, List
@@ -8,15 +5,12 @@ from typing import Optional, List
 from sqlalchemy.orm import Session
 from models import Assignment, Submission, Grade
 
-
-
-
 def create_assignment(
     db: Session,
     class_id: int,
     title: str,
     description: Optional[str],
-    criteria: list,       # Python-список — сериализуем в JSON
+    criteria: list,
     max_score: int,
     deadline: Optional[datetime],
     created_by: int,
@@ -37,10 +31,8 @@ def create_assignment(
     db.refresh(obj)
     return obj
 
-
 def get_assignment(db: Session, assignment_id: int) -> Optional[Assignment]:
     return db.query(Assignment).filter(Assignment.id == assignment_id).first()
-
 
 def get_all_assignments(db: Session, class_id: Optional[int] = None, active_only: bool = False) -> List[Assignment]:
     q = db.query(Assignment)
@@ -49,7 +41,6 @@ def get_all_assignments(db: Session, class_id: Optional[int] = None, active_only
     if active_only:
         q = q.filter(Assignment.is_active == True)
     return q.order_by(Assignment.created_at.desc()).all()
-
 
 def update_assignment(db: Session, assignment_id: int, data: dict) -> Optional[Assignment]:
     obj = get_assignment(db, assignment_id)
@@ -64,7 +55,6 @@ def update_assignment(db: Session, assignment_id: int, data: dict) -> Optional[A
     db.refresh(obj)
     return obj
 
-
 def delete_assignment(db: Session, assignment_id: int) -> bool:
     obj = get_assignment(db, assignment_id)
     if not obj:
@@ -72,9 +62,6 @@ def delete_assignment(db: Session, assignment_id: int) -> bool:
     db.delete(obj)
     db.commit()
     return True
-
-
-# ─── Submission ──────────────────────────────────────────
 
 def create_submission(
     db: Session,
@@ -99,10 +86,8 @@ def create_submission(
     db.refresh(obj)
     return obj
 
-
 def get_submission(db: Session, submission_id: int) -> Optional[Submission]:
     return db.query(Submission).filter(Submission.id == submission_id).first()
-
 
 def get_submissions_for_assignment(db: Session, assignment_id: int) -> List[Submission]:
     return (
@@ -112,7 +97,6 @@ def get_submissions_for_assignment(db: Session, assignment_id: int) -> List[Subm
         .all()
     )
 
-
 def get_submissions_for_student(db: Session, student_id: int) -> List[Submission]:
     return (
         db.query(Submission)
@@ -121,9 +105,7 @@ def get_submissions_for_student(db: Session, student_id: int) -> List[Submission
         .all()
     )
 
-
 def delete_submission(db: Session, submission_id: int, student_id: int) -> bool:
-    """Студент отзывает свою сдачу (только если ещё не проверена)."""
     obj = (
         db.query(Submission)
         .filter(Submission.id == submission_id, Submission.student_id == student_id)
@@ -132,13 +114,11 @@ def delete_submission(db: Session, submission_id: int, student_id: int) -> bool:
     if not obj:
         return False
     if obj.status in ("graded",):
-        return False  # нельзя отозвать уже проверенную
-    # Удаляем оценку, если есть
+        return False
     db.query(Grade).filter(Grade.submission_id == submission_id).delete()
     db.delete(obj)
     db.commit()
     return True
-
 
 def student_already_submitted(db: Session, assignment_id: int, student_id: int) -> bool:
     return (
@@ -151,7 +131,6 @@ def student_already_submitted(db: Session, assignment_id: int, student_id: int) 
         is not None
     )
 
-
 def set_submission_status(db: Session, submission_id: int, status: str) -> Optional[Submission]:
     obj = get_submission(db, submission_id)
     if not obj:
@@ -160,9 +139,6 @@ def set_submission_status(db: Session, submission_id: int, status: str) -> Optio
     db.commit()
     db.refresh(obj)
     return obj
-
-
-# ─── Grade ───────────────────────────────────────────────
 
 def create_or_update_grade(
     db: Session,
@@ -196,7 +172,6 @@ def create_or_update_grade(
     db.commit()
     db.refresh(grade)
     return grade
-
 
 def get_grade_by_submission(db: Session, submission_id: int) -> Optional[Grade]:
     return db.query(Grade).filter(Grade.submission_id == submission_id).first()

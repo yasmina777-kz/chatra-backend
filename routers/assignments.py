@@ -177,11 +177,7 @@ def add_variant(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_teacher),
 ):
-    """
-    Добавить вариант с эталонным решением.
-    Если вариант с таким номером уже есть — перезаписывается.
-    Загружай файл через POST /upload/ и используй полученный URL.
-    """
+
     obj = crud.get_assignment(db, assignment_id)
     if not obj:
         raise HTTPException(status_code=404, detail="Assignment not found")
@@ -209,9 +205,7 @@ def delete_variant(
         raise HTTPException(status_code=404, detail="Variant not found")
 
 
-# ════════════════════════════════════════════════════════
-#  СДАЧА ЗАДАНИЙ (студент)
-# ════════════════════════════════════════════════════════
+
 
 @router.post(
     "/assignments/{assignment_id}/submit",
@@ -299,9 +293,7 @@ def get_submissions(
     return subs
 
 
-# ════════════════════════════════════════════════════════
-#  СДАЧИ / ОЦЕНКИ
-# ════════════════════════════════════════════════════════
+
 
 @router.get("/submissions/{submission_id}", response_model=schemas.SubmissionWithGrade)
 def get_submission(
@@ -333,11 +325,7 @@ def delete_submission(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """
-    Удалить сдачу:
-    - Студент: только свою и только если ещё не проверена
-    - Учитель/Admin: любую
-    """
+
     obj = crud.get_submission(db, submission_id)
     if not obj:
         raise HTTPException(status_code=404, detail="Submission not found")
@@ -414,9 +402,8 @@ def update_status(
     return {"id": obj.id, "status": obj.status}
 
 
-# ════════════════════════════════════════════════════════
-#  AI-GRADE — выбирает нужный вариант автоматически
-# ════════════════════════════════════════════════════════
+
+
 
 @router.post(
     "/submissions/{submission_id}/ai-grade",
@@ -445,7 +432,7 @@ async def ai_grade_submission(
 
     crud.set_submission_status(db, submission_id, "grading")
 
-    # ── Собираем текст работы студента ────────────────────────────────────────
+
     full_text = sub.text_content or ""
 
     all_urls: list = []
@@ -471,7 +458,7 @@ async def ai_grade_submission(
     if not full_text:
         full_text = f"[Студент сдал файл(ы), но прочитать не удалось: {', '.join(all_urls)}]"
 
-    # ── Собираем все эталонные файлы ──────────────────────────────────────────
+
     reference_urls: list = []
 
     if sub.variant_number:
@@ -509,7 +496,7 @@ async def ai_grade_submission(
             except Exception:
                 reference_urls.append(assignment.reference_solution_url)
 
-    # ── Вызываем ИИ ──────────────────────────────────────────────────────────
+
     try:
         result = await _ai_grade(
             text=full_text,
@@ -523,7 +510,7 @@ async def ai_grade_submission(
         crud.set_submission_status(db, submission_id, "submitted")
         raise HTTPException(status_code=502, detail=str(e))
 
-    # ── Log token usage ───────────────────────────────────────────────────────
+
     try:
         usage = result.pop("_usage", {})
         from models import AiUsageLog

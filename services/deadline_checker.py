@@ -1,13 +1,3 @@
-"""
-services/deadline_checker.py
-─────────────────────────────
-Фоновая задача: когда дедлайн задания истекает — автоматически
-запускает ИИ-проверку для всех сданных работ без оценки.
-
-Запускается при старте приложения через lifespan FastAPI.
-Проверяет каждые 60 секунд.
-"""
-
 import asyncio
 import json as _json
 import logging
@@ -21,9 +11,7 @@ from services.ai_grader import grade_submission as _ai_grade, _fetch_file_text
 
 logger = logging.getLogger("deadline_checker")
 
-
 async def _grade_one(db: Session, submission, assignment) -> None:
-    """Запустить ИИ-оценку одной сдачи."""
     sub_id = submission.id
     try:
         criteria = _json.loads(assignment.criteria) if assignment.criteria else []
@@ -33,7 +21,6 @@ async def _grade_one(db: Session, submission, assignment) -> None:
 
         crud.set_submission_status(db, sub_id, "grading")
 
-        # Собираем текст из файлов
         full_text = submission.text_content or ""
         all_urls: list = []
         if submission.file_urls:
@@ -78,19 +65,15 @@ async def _grade_one(db: Session, submission, assignment) -> None:
 
     except Exception as e:
         logger.error("Ошибка при оценке сдачи %s: %s", sub_id, e)
-        # Откат статуса чтобы можно было повторить
         try:
             crud.set_submission_status(db, sub_id, "submitted")
         except Exception:
             pass
 
-
 async def _check_deadlines() -> None:
-    """Один проход: найти задания с истёкшим дедлайном и оценить несданные сдачи."""
     db: Session = SessionLocal()
     try:
         now = datetime.utcnow()
-        # Все активные задания с дедлайном в прошлом
         all_assignments = crud.get_all_assignments(db)
         expired = [
             a for a in all_assignments
@@ -114,7 +97,6 @@ async def _check_deadlines() -> None:
 
             for submission in ungraded:
                 await _grade_one(db, submission, assignment)
-                # Небольшая пауза чтобы не перегружать OpenAI API
                 await asyncio.sleep(1)
 
     except Exception as e:
@@ -122,9 +104,7 @@ async def _check_deadlines() -> None:
     finally:
         db.close()
 
-
 async def deadline_checker_loop() -> None:
-    """Бесконечный цикл — запускается как asyncio task."""
     logger.info("Deadline checker запущен (интервал: 60 сек)")
     while True:
         await _check_deadlines()

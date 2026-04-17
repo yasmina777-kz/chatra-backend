@@ -8,12 +8,9 @@ from crud import users as crud_users
 
 router = APIRouter()
 
-
 connections: dict[int, list[WebSocket]] = {}
 
-
-async def _authenticate(token: str) -> int | None:
-    """Verify JWT and return user_id, or None if invalid."""
+async def _authenticate(token: str, chat_id: int) -> int | None:
     try:
         payload = decode_token(token)
         user_id = int(payload.get("sub", 0))
@@ -24,22 +21,28 @@ async def _authenticate(token: str) -> int | None:
             user = crud_users.get_user_by_id(db, user_id)
             if not user or not user.is_active:
                 return None
+            from sqlalchemy import text
+            row = db.execute(
+                text("SELECT 1 FROM chat_members WHERE chat_id = :cid AND user_id = :uid"),
+                {"cid": chat_id, "uid": user_id},
+            ).fetchone()
+            if not row:
+                return None
             return user_id
         finally:
             db.close()
     except Exception:
         return None
 
-
 @router.websocket("/ws/{chat_id}")
 async def websocket_endpoint(
     websocket: WebSocket,
     chat_id: int,
-    token: str = Query(...),   # ?token=<jwt>
+    token: str = Query(...),
 ):
-    user_id = await _authenticate(token)
+    user_id = await _authenticate(token, chat_id)
     if not user_id:
-        await websocket.close(code=4001)   # 4001 = Unauthorized
+        await websocket.close(code=4001)
         return
 
     await websocket.accept()
@@ -49,7 +52,6 @@ async def websocket_endpoint(
         while True:
             raw = await websocket.receive_text()
 
-            # Broadcast to all members of the chat
             dead = []
             for conn in connections.get(chat_id, []):
                 try:
@@ -57,7 +59,6 @@ async def websocket_endpoint(
                 except Exception:
                     dead.append(conn)
 
-            # Clean up disconnected sockets
             for d in dead:
                 try:
                     connections[chat_id].remove(d)

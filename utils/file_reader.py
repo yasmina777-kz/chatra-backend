@@ -3,7 +3,6 @@ from parsers.docx_parser import parse_docx
 from parsers.pdf_parser import parse_pdf
 from parsers.sm_parser import parse_sm
 
-
 def read_file(file_path):
     file_path = file_path.lower()
 
@@ -18,8 +17,6 @@ def read_file(file_path):
 
     elif file_path.endswith(".sm"):
         return parse_sm(file_path)
-
-
 
     else:
         return "❌ Неизвестный формат файла"

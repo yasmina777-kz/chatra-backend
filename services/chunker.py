@@ -1,19 +1,3 @@
-"""
-services/chunker.py
-────────────────────
-Split text into overlapping token-counted chunks.
-
-Why token-based?
-  Character counts are inaccurate — a 300-char chunk can be 60 or 400 tokens
-  depending on language. tiktoken counts exactly what OpenAI will charge.
-
-Algorithm: sliding window
-  1. Encode full text → token IDs
-  2. Slice [start : start+chunk_size]
-  3. Advance start by (chunk_size - overlap)
-  4. Decode each slice back to string
-"""
-
 import logging
 from dataclasses import dataclass
 
@@ -26,9 +10,7 @@ CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "64"))
 
 logger = logging.getLogger(__name__)
 
-# cl100k_base is shared by gpt-4o, gpt-4o-mini, text-embedding-3-*
 _enc = tiktoken.get_encoding("cl100k_base")
-
 
 @dataclass
 class TextChunk:
@@ -36,16 +18,11 @@ class TextChunk:
     text: str
     token_count: int
 
-
 def chunk_text(
     text: str,
     chunk_size: int | None = None,
     overlap: int | None = None,
 ) -> list[TextChunk]:
-    """
-    Returns a list of TextChunk objects.
-    Empty or whitespace-only text returns [].
-    """
     text = text.strip()
     if not text:
         return []
@@ -88,7 +65,5 @@ def chunk_text(
     logger.debug("Chunked %d tokens → %d chunks (size=%d, overlap=%d)", total, len(chunks), size, lap)
     return chunks
 
-
 def count_tokens(text: str) -> int:
-    """Quick token count without chunking."""
     return len(_enc.encode(text))

@@ -10,14 +10,21 @@ router = APIRouter(prefix="/messages", tags=["Messages"])
 
 
 def _safe_date(val) -> str | None:
-    """Serialize date from both SQLite (string) and PostgreSQL (datetime)."""
     if val is None:
         return None
     if hasattr(val, 'isoformat'):
         return val.isoformat()
     s = str(val)
-    # SQLite stores as 'YYYY-MM-DD HH:MM:SS.ffffff' — convert to ISO
     return s.replace(' ', 'T') if s else None
+
+
+def _check_member(db: Session, chat_id: int, user_id: int) -> None:
+    row = db.execute(
+        text("SELECT 1 FROM chat_members WHERE chat_id = :cid AND user_id = :uid"),
+        {"cid": chat_id, "uid": user_id},
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=403, detail="Not a member of this chat")
 
 
 @router.post("/chat/{chat_id}")
@@ -27,10 +34,10 @@ def send_message(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    _check_member(db, chat_id, current_user.id)
     try:
         now = datetime.now(timezone.utc)
         now_str = now.strftime('%Y-%m-%d %H:%M:%S')
-        # Use string for SQLite compatibility
         result = db.execute(
             text(
                 "INSERT INTO messages (content, chat_id, user_id, created_at) "
@@ -55,6 +62,8 @@ def send_message(
             "is_read": False,
             "file_url": None,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -66,8 +75,8 @@ def get_messages(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    _check_member(db, chat_id, current_user.id)
     try:
-        # Ensure columns exist (safe no-op if already there)
         for col_sql in [
             "ALTER TABLE messages ADD COLUMN file_url TEXT",
             "ALTER TABLE messages ADD COLUMN is_read INTEGER DEFAULT 0",
@@ -99,6 +108,8 @@ def get_messages(
             }
             for r in result
         ]
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -151,8 +162,11 @@ def unread_messages(
     try:
         result = db.execute(
             text(
-                "SELECT id, content, chat_id, user_id, created_at "
-                "FROM messages WHERE user_id != :uid AND COALESCE(is_read,0) = 0 ORDER BY id"
+                "SELECT m.id, m.content, m.chat_id, m.user_id, m.created_at "
+                "FROM messages m "
+                "JOIN chat_members cm ON cm.chat_id = m.chat_id AND cm.user_id = :uid "
+                "WHERE m.user_id != :uid AND COALESCE(m.is_read, 0) = 0 "
+                "ORDER BY m.id"
             ),
             {"uid": current_user.id},
         ).fetchall()
