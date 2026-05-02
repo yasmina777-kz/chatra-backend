@@ -11,14 +11,14 @@ from deps import get_current_user, get_current_teacher
 router = APIRouter(prefix="/classes", tags=["Classes"])
 
 
-# ── CRUD классов ──────────────────────────────────────────────────────────────
+
 
 @router.get("/all", response_model=List[schemas.ClassResponse])
 def list_all_classes(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Все активные классы — для поиска по коду при вступлении."""
+
     classes = crud.get_all_classes(db)
     result = []
     for c in classes:
@@ -34,7 +34,7 @@ def list_classes(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Список классов. teacher/admin с my_only=true — только свои. student — только свои классы."""
+
     if current_user.role == "student":
         # Student sees only classes they are members of
         classes = db.query(crud.Class).filter(
@@ -57,7 +57,7 @@ def create_class(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_teacher),
 ):
-    obj = crud.create_class(db, name=body.name, description=body.description, created_by=current_user.id)
+    obj = crud.create_class(db, name=body.name, description=body.description, created_by=current_user.id, group=body.group)
     resp = schemas.ClassResponse.model_validate(obj)
     resp.member_count = 0
     return resp
@@ -102,7 +102,7 @@ def delete_class(
         raise HTTPException(status_code=404, detail="Класс не найден")
 
 
-# ── Участники ─────────────────────────────────────────────────────────────────
+
 
 @router.get("/{class_id}/members", response_model=List[schemas.UserResponse])
 def get_members(
@@ -135,10 +135,14 @@ def join_class(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Студент вступает в класс по коду (без прав учителя)."""
     obj = crud.get_class(db, class_id)
     if not obj:
         raise HTTPException(status_code=404, detail="Класс не найден")
+
+    # Проверка группы
+    if obj.group and current_user.group != obj.group:
+        raise HTTPException(status_code=403, detail="Этот класс только для группы " + obj.group)
+
     ok = crud.add_member(db, class_id, current_user.id)
     if not ok:
         raise HTTPException(status_code=400, detail="Не удалось вступить")
@@ -151,7 +155,7 @@ def leave_class(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Студент покидает класс."""
+
     crud.remove_member(db, class_id, current_user.id)
     return {"message": "Вы покинули класс"}
 
@@ -166,7 +170,7 @@ def remove_member(
     crud.remove_member(db, class_id, user_id)
 
 
-# ── Рейтинг ───────────────────────────────────────────────────────────────────
+
 
 @router.get("/{class_id}/rating", response_model=schemas.StudentRatingResponse)
 def class_rating(
@@ -174,7 +178,7 @@ def class_rating(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Рейтинг студентов внутри класса (по сумме оценок)."""
+
     obj = crud.get_class(db, class_id)
     if not obj:
         raise HTTPException(status_code=404, detail="Класс не найден")
@@ -185,7 +189,7 @@ def class_rating(
     )
 
 
-# ── Глобальный рейтинг (без prefix /classes) ─────────────────────────────────
+
 rating_router = APIRouter(tags=["Rating"])
 
 
@@ -194,7 +198,7 @@ def global_rating(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Общий рейтинг всех студентов по всем предметам."""
+
     rows = crud.get_student_rating(db, class_id=None)
     return schemas.StudentRatingResponse(
         class_id=None,

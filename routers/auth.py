@@ -2,13 +2,20 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
-from db import get_db, SessionLocal
+from db import get_db
 import schemas
 from crud import users as crud_users
 from security import hash_password, verify_password, create_access_token
 from deps import get_current_user
+from utils.groups import search_groups
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+@router.get("/groups/search")
+def get_groups(q: str = ""):
+
+    return search_groups(q)
 
 
 @router.post("/register", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
@@ -17,8 +24,19 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
     if existing:
         raise HTTPException(status_code=409, detail="Email already registered")
 
+
+    if user.group and user.group not in search_groups(""):
+        raise HTTPException(status_code=400, detail="Такой группы не существует")
+
     hashed = hash_password(user.password)
-    created = crud_users.create_user(db, user.email, hashed, user.role, full_name=user.full_name)
+    created = crud_users.create_user(
+        db,
+        user.email,
+        hashed,
+        user.role,
+        full_name=user.full_name,
+        group=user.group
+    )
     return created
 
 
@@ -46,11 +64,17 @@ def update_me(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Обновить своё ФИО."""
     if body.full_name is not None:
         current_user.full_name = body.full_name.strip() or None
-        db.commit()
-        db.refresh(current_user)
+
+    if body.group is not None:
+
+        if body.group not in search_groups(""):
+            raise HTTPException(status_code=400, detail="Такой группы не существует")
+        current_user.group = body.group
+
+    db.commit()
+    db.refresh(current_user)
     return current_user
 
 

@@ -28,6 +28,7 @@ class Class(Base):
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    group: Mapped[str] = mapped_column(String(100), nullable=True)
 
     creator: Mapped["User"] = relationship(back_populates="classes_created", foreign_keys=[created_by])
     members: Mapped[list["User"]] = relationship(
@@ -45,6 +46,7 @@ class User(Base):
     role: Mapped[str] = mapped_column(String, default="student", nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     full_name: Mapped[str] = mapped_column(String(200), nullable=True)
+    group: Mapped[str] = mapped_column(String(100), nullable=True)
 
     posts: Mapped[list["Posts"]] = relationship(
         back_populates="user",

@@ -24,11 +24,11 @@ ALLOWED_EXTENSIONS = {
 }
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 
-# Magic bytes для проверки реального типа файла
+
 MAGIC_BYTES: dict = {
     b"\x25\x50\x44\x46": "pdf",
-    b"\x50\x4b\x03\x04": "zip/docx/xlsx/pptx",  # ZIP-based formats
-    b"\xd0\xcf\x11\xe0": "doc/xls/ppt",          # Old Office formats
+    b"\x50\x4b\x03\x04": "zip/docx/xlsx/pptx",
+    b"\xd0\xcf\x11\xe0": "doc/xls/ppt",
     b"\x89\x50\x4e\x47": "png",
     b"\xff\xd8\xff":     "jpg",
     b"\x47\x49\x46\x38": "gif",
@@ -37,13 +37,13 @@ MAGIC_BYTES: dict = {
     b"\x1f\x8b":         "gz",
 }
 
-# Расширения которые должны быть текстом (не бинарными)
+
 TEXT_EXTENSIONS = {"txt", "md", "csv", "rtf", "sm"}
 
 def _validate_file_content(content: bytes, ext: str) -> bool:
-    """Проверяет что содержимое файла соответствует заявленному расширению."""
+
     if ext in TEXT_EXTENSIONS:
-        # Текстовый файл — просто проверяем что он декодируется
+
         try:
             content[:1024].decode("utf-8", errors="strict")
             return True
@@ -94,7 +94,7 @@ async def upload_file(
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(status_code=413, detail="Файл слишком большой (максимум 50 МБ)")
 
-    # Проверка содержимого файла по magic bytes
+
     if not _validate_file_content(content, ext):
         raise HTTPException(
             status_code=415,

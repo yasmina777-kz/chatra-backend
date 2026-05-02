@@ -14,16 +14,15 @@ router = APIRouter(prefix="/ai", tags=["AI"])
 OPENAI_URL = "https://api.openai.com/v1/chat/completions"
 OPENAI_MODEL = "gpt-4o-mini"   # supports vision
 
-# ── Rate limiting (in-memory, per user) ──────────────────────────────────────
-# Лимит: не более 20 запросов в минуту на пользователя
+
 _rate_store: dict = defaultdict(list)
-RATE_LIMIT = 20       # запросов
-RATE_WINDOW = 60      # секунд
+RATE_LIMIT = 20
+RATE_WINDOW = 60
 
 def _check_rate_limit(user_id: int):
     now = time.time()
     timestamps = _rate_store[user_id]
-    # Удаляем старые записи за пределами окна
+
     _rate_store[user_id] = [t for t in timestamps if now - t < RATE_WINDOW]
     if len(_rate_store[user_id]) >= RATE_LIMIT:
         raise HTTPException(
@@ -34,8 +33,8 @@ def _check_rate_limit(user_id: int):
 
 
 class ChatMessage(BaseModel):
-    role: str                          # "system" | "user" | "assistant"
-    content: Union[str, List[Any]]     # str for text, list for vision
+    role: str
+    content: Union[str, List[Any]]
 
 
 class ChatRequest(BaseModel):
@@ -50,10 +49,10 @@ class ChatResponse(BaseModel):
 
 
 def _serialize_message(m: ChatMessage) -> dict:
-    """Convert ChatMessage → OpenAI-compatible dict."""
+
     if isinstance(m.content, str):
         return {"role": m.role, "content": m.content}
-    # Vision / multimodal content (list of content blocks)
+
     return {"role": m.role, "content": m.content}
 
 
@@ -77,11 +76,11 @@ async def ai_chat(
 
     max_tokens = min(body.max_tokens, 4000)
 
-    # Detect if any message contains an image → use vision-capable model
+
     has_vision = any(
         isinstance(m.content, list) for m in body.messages
     )
-    model = OPENAI_MODEL  # gpt-4o-mini handles both text and vision
+    model = OPENAI_MODEL
 
     payload = {
         "model": model,
@@ -116,7 +115,7 @@ async def ai_chat(
     data = resp.json()
     content = data["choices"][0]["message"]["content"]
 
-    # ── Log token usage ───────────────────────────────────────────────────────
+
     try:
         usage = data.get("usage", {})
         from models import AiUsageLog
